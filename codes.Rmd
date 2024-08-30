@@ -1,0 +1,412 @@
+---
+title: "tekrarlı ölçümler deneme deseni"
+author: "Assoc. Prof. Burcu MESTAV"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    keep_md: yes
+    number_sections: yes
+    toc: true
+    toc_depth: 2
+    highlight: textmate
+    html_preview: TRUE
+    df_print: kable
+    pandoc_args:
+    - --number-sections
+    - --number-offset=0
+fontsize: 11pt
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	dpi=500,
+	dev = "jpeg",
+	fig.width = 14,
+	fig.height = 10
+)
+```
+
+
+
+```{r Library-calls, message=FALSE, warning=FALSE, include=F, eval=T, results="hide"}
+library(tidyverse)
+library(olsrr)
+library(data.table)
+library(ggthemr) # harika bir tema
+library(kableExtra)
+library(knitr)
+library(PerformanceAnalytics)
+library(GGally)
+library(ggpubr)
+library(agricolae)
+library(MASS)
+library(tidyr)
+library(broom)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(downloadthis)
+library(car)
+library(downloadthis)
+library(readxl)
+library(stringr)
+library(ggstatsplot)
+library(rstatix)
+library(nlme)
+library(lme4)
+```
+
+
+```{r fonksiyon, include=FALSE}
+create_dt <- function(x){
+  DT::datatable(x,
+                extensions = 'Buttons',
+                options = list(dom = 'Blfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               lengthMenu = list(c(10,25,50,-1),
+                                                 c(10,25,50,"All"))))
+}
+```
+
+# Giriş
+
+```{r}
+
+#data2 <- read.csv('http://courses.washington.edu/psy524a/datasets/SubjectExerciseANOVAdependent.csv')
+
+#data2.wide <- reshape(data2, idvar ="subject", timevar = "time", direction = "wide")
+
+dat=read.csv("dat.csv")
+dat2=read.csv("dat2.csv")
+
+```
+
+
+```{r}
+anova.out.3 <- anova(lmer(weight ~ time + (1|subject),data = data2))
+anova.out.3
+
+rm_anova_nlme <- lme(
+  weight ~ time,
+  random = ~1 | subject,
+  data = data2
+)
+
+# Print the results
+print(summary(rm_anova_nlme))
+# Print the results
+print(anova(rm_anova_nlme))
+
+
+
+# Perform Mixed ANOVA
+
+model = aov(weight ~ time + Error(subject/time), data = data2)
+
+summary(model)
+```
+
+## Kalp atış hızı (1RM)
+
+```{r}
+library(tibble)
+
+# Create a dataframe with medical application data in wide format
+medical_data <- tribble(
+  ~hasta_no, ~Önce, ~Sırasında, ~Sonra,
+  1, 75, 85, 80,
+  2, 80, 90, 82,
+  3, 70, 75, 74,
+  4, 85, 95, 88,
+  5, 78, 88, 81
+)
+create_dt(medical_data)
+```
+
+### PREPARING DATA
+Before exploring and modelling ANOVA is necessary to pass the data to long format.
+
+To convert the wide format data to long format, we can use the pivot_longer function from the tidyr package:
+
+```{r}
+# Load necessary packages
+library(tidyr)
+
+# Convert to long format
+medical_data <- pivot_longer(
+  data = medical_data,
+  cols = c(Önce, Sırasında, Sonra),
+  names_to = "Zaman_noktası",
+  values_to = "Kalp_Hızı"
+)
+```
+
+And converting Patient ID to factor (Although for certain packages is not necessary):
+
+```{r}
+medical_data$hasta_no = as.factor(medical_data$hasta_no)
+
+medical_data$Zaman_noktası = factor(medical_data$Zaman_noktası,
+                                    levels=c("Önce","Sırasında","Sonra"))
+
+# Print the dataframe in long format
+print(medical_data)
+```
+
+### DATA EXPLORATION
+Let’s create some tables to summarize the data
+
+```{r}
+table_sum<- medical_data %>%
+  group_by(Zaman_noktası) %>%
+  get_summary_stats(Kalp_Hızı, type = "full",
+  show = c("n","mean","sd","max","min","se","median"))
+create_dt(table_sum)
+```
+
+
+```{r}
+ggplot(medical_data, aes(Zaman_noktası,Kalp_Hızı))+
+  geom_boxplot(aes(col=Zaman_noktası))+
+  labs(title="5 Hastanın Ameliyat Öncesi, Sırasında ve Sonrasında Ölçülen Kalp Atış Hızları ", x=" ", y="Kalp Hızı")+
+  theme_bw()+
+  guides(fill=F) + geom_hline(yintercept=mean(medical_data$Kalp_Hızı),
+                              linetype="dotted")+
+  theme(text = element_text(family = "Times New Roman", size=11),legend.position = " ", 
+        legend.title = element_blank())
+  
+
+```
+
+```{r}
+# Create an interaction plot
+interaction.plot(
+  x.factor = medical_data$Zaman_noktası,
+  trace.factor = medical_data$hasta_no,
+  response = medical_data$Kalp_Hızı,
+  xlab="Zaman",
+  ylab = "Kalp Atış Hızı",
+  trace.label = "Hasta"
+)
+
+ggplot(medical_data, aes(Zaman_noktası, Kalp_Hızı, colour=hasta_no)) +
+  geom_point(size = 2.5) +
+  geom_line(aes(group = hasta_no), linewidth = 1) +
+  theme_minimal()
+```
+
+```{r}
+anova.out.3 <- anova(lmer(Kalp_Hızı ~ Zaman_noktası + (1|hasta_no),data = medical_data))
+anova.out.3
+
+rm_anova_nlme <- lme(
+  Kalp_Hızı ~ Zaman_noktası,
+  random = ~1 | hasta_no,
+  data = medical_data
+)
+
+# Print the results
+print(anova(rm_anova_nlme))
+# Print the resultsx
+
+print(anova(rm_anova_nlme))
+
+
+
+# Perform Mixed ANOVA
+
+model = aov(Kalp_Hızı ~ Zaman_noktası+Error(hasta_no/Zaman_noktası) , data = medical_data)
+
+summary(model)
+
+# Perform Repeated Measures ANOVA with the rstatix package
+rm_anova <- anova_test(
+  data = medical_data,
+  dv = Kalp_Hızı,
+  wid = hasta_no,
+  within = Zaman_noktası,
+  type = 3  # Specifies repeated measures design
+)
+
+# Print the results
+rm_anova
+
+pwc <- medical_data %>%
+  pairwise_t_test(
+    Kalp_Hızı ~ Zaman_noktası, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+create_dt(pwc)
+
+
+pwc <- pwc %>% add_xy_position(x = "Zaman_noktası")
+bxp + 
+  stat_pvalue_manual(pwc) +
+  labs(
+    subtitle = get_test_label(rm_anova, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+```
+
+
+## two way on one repeated factor 
+
+```{r}
+Input = ("
+Katılımcı	Program	Ay	Kalori
+1	ProgramA	Ay1	2000
+2	ProgramA	Ay1	1900
+3	ProgramA	Ay1	2100
+4	ProgramA	Ay1	2000
+1	ProgramA	Ay2	1978
+2	ProgramA	Ay2	1826
+3	ProgramA	Ay2	2067
+4	ProgramA	Ay2	1981
+1	ProgramA	Ay3	1962
+2	ProgramA	Ay3	1782
+3	ProgramA	Ay3	2065
+4	ProgramA	Ay3	1987
+1	ProgramA	Ay4	1873
+2	ProgramA	Ay4	1718
+3	ProgramA	Ay4	2015
+4	ProgramA	Ay4	2016
+1	ProgramA	Ay5	1782
+2	ProgramA	Ay5	1639
+3	ProgramA	Ay5	1994
+4	ProgramA	Ay5	2010
+1	ProgramA	Ay6	1737
+2	ProgramA	Ay6	1644
+3	ProgramA	Ay6	1919
+4	ProgramA	Ay6	1946
+1	ProgramB	Ay1	2100
+2	ProgramB	Ay1	2000
+3	ProgramB	Ay1	2000
+4	ProgramB	Ay1	2000
+1	ProgramB	Ay2	2004
+2	ProgramB	Ay2	2011
+3	ProgramB	Ay2	2074
+4	ProgramB	Ay2	1970
+1	ProgramB	Ay3	2027
+2	ProgramB	Ay3	2089
+3	ProgramB	Ay3	2141
+4	ProgramB	Ay3	1951
+1	ProgramB	Ay4	2109
+2	ProgramB	Ay4	2124
+3	ProgramB	Ay4	2199
+4	ProgramB	Ay4	1981
+1	ProgramB	Ay5	2197
+2	ProgramB	Ay5	2199
+3	ProgramB	Ay5	2265
+4	ProgramB	Ay5	1987
+1	ProgramB	Ay6	2294
+2	ProgramB	Ay6	2234
+3	ProgramB	Ay6	2254
+4	ProgramB	Ay6	1969
+1	ProgramC	Ay1	1950
+2	ProgramC	Ay1	2000
+3	ProgramC	Ay1	2000
+4	ProgramC	Ay1	2000
+1	ProgramC	Ay2	2007
+2	ProgramC	Ay2	2029
+3	ProgramC	Ay2	1976
+4	ProgramC	Ay2	2020
+1	ProgramC	Ay3	1978
+2	ProgramC	Ay3	2033
+3	ProgramC	Ay3	2025
+4	ProgramC	Ay3	2009
+1	ProgramC	Ay4	1965
+2	ProgramC	Ay4	2050
+3	ProgramC	Ay4	2047
+4	ProgramC	Ay4	2017
+1	ProgramC	Ay5	1984
+2	ProgramC	Ay5	2001
+3	ProgramC	Ay5	2033
+4	ProgramC	Ay5	1989
+1	ProgramC	Ay6	2020
+2	ProgramC	Ay6	1988
+3	ProgramC	Ay6	1984
+4	ProgramC	Ay6	2020
+")
+data = read.table(textConnection(Input),header=TRUE)
+data$Program = as.factor(data$Program)
+data$Katılımcı = factor(data$Katılımcı,
+                         levels=unique(data$Katılımcı))
+data$Ay = factor(data$Ay,
+                         levels=unique(data$Ay))
+
+summary(data)
+```
+
+```{r}
+p1box <- ggplot(data=data, aes(x=Ay, y=Kalori, fill=Program)) +
+  geom_boxplot()
+p2box <- p1box +
+  labs(title="Program ve Aya göre Kalori değerleri", x="Ay", y = "Kalori değeri") +
+  theme_classic() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(),
+        axis.line.y = element_line(colour="black", linewidth=.7),
+        axis.line.x = element_line(colour="black", linewidth=.7),
+        plot.title = element_text(hjust=.5)
+)+
+  scale_fill_manual(values=c('honeydew3','honeydew2', 'honeydew1'))
+p2box
+```
+
+
+
+```{r}
+table_sum<- data %>%
+  group_by(Program, Ay) %>%
+  get_summary_stats(Kalori, type = "full",
+  show = c("n","mean","sd","max","min","se","median"))
+create_dt(table_sum)
+
+summ <- Rmisc::summarySEwithin(data=data, idvar="Katılımcı",measurevar="Kalori", withinvars=c("Program", "Ay"))
+colnames(summ) <- c("Program", "Ay", "N", "mean", "sd", "sem", "CI" )
+summ
+```
+
+```{r}
+interaction.plot(
+  x.factor = data$Ay,
+  trace.factor = data$Program,
+  response = data$Kalori,
+  fixed = F,
+  xlab="Aylar",
+  ylab = "Kalori",
+  trace.label = "Beslenme Programı"
+)
+
+ggplot(data, aes(Ay, Kalori, colour=Program)) +
+  geom_point(size = 1.5) +
+  geom_line(aes(group = Katılımcı), linewidth = 1) +
+  theme_minimal()
+a <- aov_ez("Katılımcı", "Kalori", data, between = "Program", within = "Ay",fun_aggregate = NULL)
+
+afex_plot(a, "Program", "Ay", "Kalori")
+
+```
+
+
+```{r}
+fit1.afex <- aov_car(Kalori ~ (Program*Ay)
+                     + Error(Katılımcı/(Program*Ay)),
+                     anova_table = list(correction = "none"),
+                     return="univariate",
+                     data=data)
+gt(afex::nice(fit1a.afex, es=c("pes","ges"), correction = "none"))
+```
+
+```{r}
+res.aov <- data %>% anova_test(dv = Kalori,wid = Katılımcı, within = c(Program,Ay))
+```
+
